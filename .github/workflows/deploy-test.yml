@@ -1,0 +1,49 @@
+name: Deploy Test
+
+on:
+    workflow_dispatch:
+
+env:
+    ECR_REGISTRY: 651084712750.dkr.ecr.us-east-1.amazonaws.com
+    ECR_REPOSITORY: ecommerce-app
+    AWS_REGION: us-east-1
+
+jobs:
+    build-and-push:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout infra repo
+              uses: actions/checkout@v4
+              with:
+                  path: infra
+
+            - name: Checkout source repo
+              uses: actions/checkout@v4
+              with:
+                  repository: theolecuyer/E-Commerce-react-node-mysql
+                  path: app
+
+            - name: Copy nginx.conf into source repo build context
+              run: cp infra/nginx.conf app/nginx.conf
+
+            - name: Configure AWS credentials
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                  aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                  aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                  aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+                  aws-region: ${{ env.AWS_REGION }}
+
+            - name: Login to ECR
+              run: |
+                  aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+                  docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
+
+            - name: Build and push to ECR
+              run: |
+                  docker build \
+                    --build-arg REACT_APP_API_URL=https://tlecuyer.codes/ \
+                    -t ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest \
+                    ./app
+                  docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
