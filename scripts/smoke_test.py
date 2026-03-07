@@ -75,7 +75,7 @@ try:
     assert r.status_code == 200, f'Products failed: {r.status_code}'
 
     r = requests.post(f'{base}/api/users/login',
-                      json={'email': 'test@test.com', 'password': 'test'}, timeout=10)
+                      json={'email': 'c@gmail.com', 'password': '123456'}, timeout=10)
     print(f'POST /api/users/login -> {r.status_code}')
     assert r.status_code in (200, 401), f'Login failed: {r.status_code}'
 
