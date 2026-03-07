@@ -68,7 +68,9 @@ jobs:
               env:
                   ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
                   ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
-                  ECR_PASSWORD: ${{ steps.login-ecr.outputs.docker-password }}
+                  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                  AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
                   DB_SERVER_HOST: ${{ secrets.DB_SERVER_HOST }}
                   DB_SERVER_USER: ${{ secrets.DB_SERVER_USER }}
                   DB_SERVER_PASSWORD: ${{ secrets.DB_SERVER_PASSWORD }}
@@ -79,12 +81,17 @@ jobs:
                   host: ${{ secrets.QA_EC2_IP }}
                   username: ec2-user
                   key: ${{ secrets.EC2_SSH_KEY }}
-                  envs: ECR_REGISTRY,ECR_REPOSITORY,ECR_PASSWORD,DB_SERVER_HOST,DB_SERVER_USER,DB_SERVER_PASSWORD,DB_SERVER_DATABASE,JWT_SECRET_KEY_ACCESS_TOKEN,JWT_SECRET_KEY_REFRESH_TOKEN
+                  envs: ECR_REGISTRY,ECR_REPOSITORY,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_SESSION_TOKEN,DB_SERVER_HOST,DB_SERVER_USER,DB_SERVER_PASSWORD,DB_SERVER_DATABASE,JWT_SECRET_KEY_ACCESS_TOKEN,JWT_SECRET_KEY_REFRESH_TOKEN
                   script: |
-                      docker login --username AWS --password "$ECR_PASSWORD" $ECR_REGISTRY
+                      aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+                      aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+                      aws configure set aws_session_token $AWS_SESSION_TOKEN
+                      aws configure set region us-east-1
+                      aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ECR_REGISTRY
                       docker pull $ECR_REGISTRY/$ECR_REPOSITORY:latest
                       docker rm -f $(docker ps -aq)
-                      docker run -d --name ecommerce -p 3001:3001 \
+                      docker run -d --name ecommerce -p 80:80 -p 443:443 \
+                        -v /etc/letsencrypt:/etc/letsencrypt:ro \
                         -e DB_SERVER_HOST="$DB_SERVER_HOST" \
                         -e DB_SERVER_USER="$DB_SERVER_USER" \
                         -e DB_SERVER_PASSWORD="$DB_SERVER_PASSWORD" \
