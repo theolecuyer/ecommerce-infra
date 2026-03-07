@@ -44,7 +44,7 @@ jobs:
               run: docker build --build-arg REACT_APP_API_URL=https://tlecuyer.codes/ -t ecommerce-app:test ./app
 
             - name: Install Python script dependencies
-              run: pip install boto3 requests paramiko
+              run: pip install boto3 requests
 
             - name: Run EC2 smoke test
               run: python infra/scripts/smoke_test.py
@@ -57,8 +57,6 @@ jobs:
                   DB_SERVER_DATABASE: ${{ secrets.DB_SERVER_DATABASE }}
                   JWT_SECRET_KEY_ACCESS_TOKEN: ${{ secrets.JWT_SECRET_KEY_ACCESS_TOKEN }}
                   JWT_SECRET_KEY_REFRESH_TOKEN: ${{ secrets.JWT_SECRET_KEY_REFRESH_TOKEN }}
-                  SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
-                  SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
 
             - name: Push :latest to ECR
               run: |
