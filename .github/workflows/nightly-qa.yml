@@ -1,0 +1,68 @@
+name: Nightly QA Build
+
+on:
+    schedule:
+        - cron: "0 0 * * *"
+    workflow_dispatch:
+
+env:
+    ECR_REGISTRY: 651084712750.dkr.ecr.us-east-1.amazonaws.com
+    ECR_REPOSITORY: ecommerce-app
+    AWS_REGION: us-east-1
+
+jobs:
+    qa-build:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout infra repo
+              uses: actions/checkout@v4
+              with:
+                  path: infra
+
+            - name: Checkout source repo
+              uses: actions/checkout@v4
+              with:
+                  repository: theolecuyer/E-Commerce-react-node-mysql
+                  path: app
+
+            - name: Copy nginx.conf into build
+              run: cp infra/nginx.conf app/nginx.conf
+
+            - name: Configure AWS credentials
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                  aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                  aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                  aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+                  aws-region: ${{ env.AWS_REGION }}
+
+            - name: Build test image
+              run: |
+                  docker build \
+                    --build-arg REACT_APP_API_URL=https://tlecuyer.codes/ \
+                    -t ecommerce-app:test \
+                    ./app
+
+            - name: Install Python script dependencies
+              run: pip install boto3 requests
+
+            - name: Run EC2 smoke test
+              run: python infra/scripts/smoke_test.py
+              env:
+                  QA_SECURITY_GROUP_ID: ${{ secrets.QA_SECURITY_GROUP_ID }}
+                  EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+                  DB_SERVER_HOST: ${{ secrets.DB_SERVER_HOST }}
+                  DB_SERVER_USER: ${{ secrets.DB_SERVER_USER }}
+                  DB_SERVER_PASSWORD: ${{ secrets.DB_SERVER_PASSWORD }}
+                  DB_SERVER_DATABASE: ${{ secrets.DB_SERVER_DATABASE }}
+                  JWT_SECRET_KEY_ACCESS_TOKEN: ${{ secrets.JWT_SECRET_KEY_ACCESS_TOKEN }}
+                  JWT_SECRET_KEY_REFRESH_TOKEN: ${{ secrets.JWT_SECRET_KEY_REFRESH_TOKEN }}
+
+            - name: Push to ECR
+              run: |
+                  aws ecr get-login-password --region ${{ env.AWS_REGION }} | \
+                    docker login --username AWS --password-stdin ${{ env.ECR_REGISTRY }}
+                  docker tag ecommerce-app:test \
+                    ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+                  docker push ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
