@@ -1,6 +1,7 @@
 import boto3
 import subprocess
 import requests
+import paramiko
 import shlex
 import time
 import os
@@ -18,14 +19,11 @@ ec2 = boto3.client('ec2', region_name=REGION)
 instance_id = None
 
 
-def ssh(ip, cmd):
-    result = subprocess.run(
-        ['ssh', '-o', 'StrictHostKeyChecking=no', '-i', KEY_PATH, f'ec2-user@{ip}', cmd],
-        capture_output=True, text=True
-    )
-    if result.returncode != 0:
-        raise Exception(f'SSH failed: {result.stderr}')
-    return result.stdout
+def run(client, cmd):
+    _, stdout, stderr = client.exec_command(cmd)
+    if stdout.channel.recv_exit_status() != 0:
+        raise Exception(f'SSH failed: {stderr.read().decode()}')
+    return stdout.read().decode()
 
 
 try:
@@ -55,15 +53,19 @@ try:
 
     with open(KEY_PATH, 'w') as f:
         f.write(os.environ['EC2_SSH_KEY'])
-    subprocess.run(['chmod', '600', KEY_PATH])
+    os.chmod(KEY_PATH, 0o600)
 
     subprocess.run(
         f'docker save ecommerce-app:test | gzip | ssh -o StrictHostKeyChecking=no -i {KEY_PATH} ec2-user@{public_ip} "gunzip | docker load"',
         shell=True, check=True
     )
 
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    client.connect(public_ip, username='ec2-user', key_filename=KEY_PATH)
+
     env_flags = ' '.join(f'-e {k}={shlex.quote(os.environ[k])}' for k in ENV_KEYS)
-    ssh(public_ip, f'docker run -d --name ecommerce -p 3001:3001 {env_flags} ecommerce-app:test node /app/app.js')
+    run(client, f'docker run -d --name ecommerce -p 3001:3001 {env_flags} ecommerce-app:test node /app/app.js')
 
     time.sleep(10)
 

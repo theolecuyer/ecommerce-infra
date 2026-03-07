@@ -44,7 +44,7 @@ jobs:
               run: docker build --build-arg REACT_APP_API_URL=https://tlecuyer.codes/ -t ecommerce-app:test ./app
 
             - name: Install Python script dependencies
-              run: pip install boto3 requests
+              run: pip install boto3 requests paramiko
 
             - name: Run EC2 smoke test
               run: python infra/scripts/smoke_test.py
