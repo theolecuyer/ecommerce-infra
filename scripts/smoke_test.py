@@ -52,7 +52,7 @@ try:
         InstanceType='t3.micro',
         KeyName='vockey',
         SecurityGroupIds=[os.environ['QA_SECURITY_GROUP_ID']],
-        UserData='#!/bin/bash',
+        UserData='#!/bin/bash\nyum install -y docker\nsystemctl start docker',
         MinCount=1,
         MaxCount=1,
         TagSpecifications=[{
@@ -67,12 +67,11 @@ try:
     public_ip = ec2.describe_instances(InstanceIds=[instance_id])['Reservations'][0]['Instances'][0]['PublicIpAddress']
     print(f'IP: {public_ip}')
 
+    time.sleep(30)
+
     ssh = paramiko.SSHClient()
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(public_ip, username='ec2-user', key_filename=KEY_PATH)
-
-    run(ssh, 'sudo yum install -y docker')
-    run(ssh, 'sudo systemctl start docker')
 
     subprocess.run(
         f'docker save ecommerce-app:test | gzip | ssh -o StrictHostKeyChecking=no -i {KEY_PATH} ec2-user@{public_ip} "gunzip | sudo docker load"',
@@ -81,6 +80,9 @@ try:
 
     env_flags = ' '.join(f'-e {k}={shlex.quote(os.environ[k])}' for k in ENV_KEYS)
     run(ssh, f'sudo docker run -d --name ecommerce -p 3001:3001 {env_flags} ecommerce-app:test node /app/server/app.js')
+
+    print(run(ssh, 'sudo docker ps -a'))
+    print(run(ssh, 'sudo docker logs ecommerce'))
 
     wait_for_container(ssh, 3001)
 
