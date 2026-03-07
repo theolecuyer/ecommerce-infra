@@ -21,6 +21,21 @@ ec2 = boto3.client('ec2', region_name=REGION)
 instance_id = None
 
 
+def wait_for_container(ssh, port, retries=12, delay=5):
+    for i in range(retries):
+        try:
+            _, stdout, _ = ssh.exec_command(f'curl -s -o /dev/null -w "%{{http_code}}" http://localhost:{port}/api/products')
+            code = stdout.read().decode().strip()
+            if code == '200':
+                print(f'Container ready after {i * delay}s')
+                return
+        except:
+            pass
+        print(f'Waiting... ({i+1}/{retries})')
+        time.sleep(delay)
+    raise Exception('Container never became ready')
+
+
 def run(ssh, cmd):
     _, stdout, stderr = ssh.exec_command(cmd)
     if stdout.channel.recv_exit_status() != 0:
@@ -68,7 +83,7 @@ try:
     env_flags = ' '.join(f'-e {k}={os.environ[k]}' for k in ENV_KEYS)
     run(ssh, f'sudo docker run -d --name ecommerce -p 3001:3001 {env_flags} {ECR_REGISTRY}/{ECR_REPOSITORY}:test')
 
-    time.sleep(10)
+    wait_for_container(ssh, 3001)
 
     base = f'http://{public_ip}:3001'
     print(f'Testing {base}')
