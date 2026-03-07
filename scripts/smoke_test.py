@@ -2,6 +2,7 @@ import boto3
 import subprocess
 import requests
 import paramiko
+import shlex
 import time
 import os
 import sys
@@ -77,10 +78,10 @@ try:
     run(ssh, 'sudo usermod -a -G docker ec2-user')
 
     ecr_password = subprocess.check_output(['aws', 'ecr', 'get-login-password', '--region', REGION], text=True).strip()
-    run(ssh, f'sudo docker login --username AWS --password {ecr_password} {ECR_REGISTRY}')
+    run(ssh, f'echo {shlex.quote(ecr_password)} | sudo docker login --username AWS --password-stdin {ECR_REGISTRY}')
     run(ssh, f'sudo docker pull {ECR_REGISTRY}/{ECR_REPOSITORY}:test')
 
-    env_flags = ' '.join(f'-e {k}={os.environ[k]}' for k in ENV_KEYS)
+    env_flags = ' '.join(f'-e {k}={shlex.quote(os.environ[k])}' for k in ENV_KEYS)
     run(ssh, f'sudo docker run -d --name ecommerce -p 3001:3001 {env_flags} {ECR_REGISTRY}/{ECR_REPOSITORY}:test')
 
     wait_for_container(ssh, 3001)
