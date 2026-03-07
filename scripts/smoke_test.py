@@ -41,6 +41,10 @@ try:
         UserData='#!/bin/bash\nyum install -y docker\nsystemctl start docker\nusermod -a -G docker ec2-user',
         MinCount=1,
         MaxCount=1,
+        TagSpecifications=[{
+            'ResourceType': 'instance',
+            'Tags': [{'Key': 'Name', 'Value': 'smoke-test-qa-ecommerce'}],
+        }],
     )
     instance_id = response['Instances'][0]['InstanceId']
     print(f'Launched: {instance_id}')
@@ -64,11 +68,15 @@ try:
     time.sleep(10)
 
     base = f'http://{public_ip}:3001'
+    print(f'Testing {base}')
+
     r = requests.get(f'{base}/api/products', timeout=10)
+    print(f'GET /api/products -> {r.status_code}')
     assert r.status_code == 200, f'Products failed: {r.status_code}'
 
     r = requests.post(f'{base}/api/users/login',
                       json={'email': 'test@test.com', 'password': 'test'}, timeout=10)
+    print(f'POST /api/users/login -> {r.status_code}')
     assert r.status_code in (200, 401), f'Login failed: {r.status_code}'
 
     print('Smoke tests passed!')
