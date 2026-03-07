@@ -10,8 +10,6 @@ import sys
 REGION = 'us-east-1'
 AMI_ID = 'ami-0f3caa1cf4417e51b'
 KEY_PATH = '/tmp/vockey.pem'
-ECR_REGISTRY = os.environ['ECR_REGISTRY']
-ECR_REPOSITORY = os.environ['ECR_REPOSITORY']
 
 ENV_KEYS = [
     'DB_SERVER_HOST', 'DB_SERVER_USER', 'DB_SERVER_PASSWORD',
@@ -75,14 +73,14 @@ try:
 
     run(ssh, 'sudo yum install -y docker')
     run(ssh, 'sudo systemctl start docker')
-    run(ssh, 'sudo usermod -a -G docker ec2-user')
 
-    ecr_password = subprocess.check_output(['aws', 'ecr', 'get-login-password', '--region', REGION], text=True).strip()
-    run(ssh, f'echo {shlex.quote(ecr_password)} | sudo docker login --username AWS --password-stdin {ECR_REGISTRY}')
-    run(ssh, f'sudo docker pull {ECR_REGISTRY}/{ECR_REPOSITORY}:test')
+    subprocess.run(
+        f'docker save ecommerce-app:test | gzip | ssh -o StrictHostKeyChecking=no -i {KEY_PATH} ec2-user@{public_ip} "gunzip | sudo docker load"',
+        shell=True, check=True
+    )
 
     env_flags = ' '.join(f'-e {k}={shlex.quote(os.environ[k])}' for k in ENV_KEYS)
-    run(ssh, f'sudo docker run -d --name ecommerce -p 3001:3001 {env_flags} {ECR_REGISTRY}/{ECR_REPOSITORY}:test')
+    run(ssh, f'sudo docker run -d --name ecommerce -p 3001:3001 {env_flags} ecommerce-app:test node /app/server/app.js')
 
     wait_for_container(ssh, 3001)
 

@@ -43,11 +43,6 @@ jobs:
             - name: Build test image
               run: docker build --build-arg REACT_APP_API_URL=https://tlecuyer.codes/ -t ecommerce-app:test ./app
 
-            - name: Push :test tag to ECR
-              run: |
-                  docker tag ecommerce-app:test ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:test
-                  docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:test
-
             - name: Install Python script dependencies
               run: pip install boto3 requests paramiko
 
@@ -56,8 +51,6 @@ jobs:
               env:
                   QA_SECURITY_GROUP_ID: ${{ secrets.QA_SECURITY_GROUP_ID }}
                   EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-                  ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-                  ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
                   DB_SERVER_HOST: ${{ secrets.DB_SERVER_HOST }}
                   DB_SERVER_USER: ${{ secrets.DB_SERVER_USER }}
                   DB_SERVER_PASSWORD: ${{ secrets.DB_SERVER_PASSWORD }}
@@ -67,10 +60,9 @@ jobs:
                   SMOKE_TEST_EMAIL: ${{ secrets.SMOKE_TEST_EMAIL }}
                   SMOKE_TEST_PASSWORD: ${{ secrets.SMOKE_TEST_PASSWORD }}
 
-            - name: Promote :test to :latest in ECR
+            - name: Push :latest to ECR
               run: |
-                  docker tag ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:test \
-                    ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
+                  docker tag ecommerce-app:test ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
                   docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
 
             - name: Deploy to QA EC2
