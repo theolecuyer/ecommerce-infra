@@ -38,7 +38,7 @@ try:
         InstanceType='t3.micro',
         KeyName='vockey',
         SecurityGroupIds=[os.environ['QA_SECURITY_GROUP_ID']],
-        UserData='#!/bin/bash\nyum install -y docker\nsystemctl start docker\nusermod -a -G docker ec2-user',
+        UserData='#!/bin/bash',
         MinCount=1,
         MaxCount=1,
         TagSpecifications=[{
@@ -57,12 +57,16 @@ try:
     ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
     ssh.connect(public_ip, username='ec2-user', key_filename=KEY_PATH)
 
+    run(ssh, 'sudo yum install -y docker')
+    run(ssh, 'sudo systemctl start docker')
+    run(ssh, 'sudo usermod -a -G docker ec2-user')
+
     ecr_password = subprocess.check_output(['aws', 'ecr', 'get-login-password', '--region', REGION], text=True).strip()
-    run(ssh, f'docker login --username AWS --password {ecr_password} {ECR_REGISTRY}')
-    run(ssh, f'docker pull {ECR_REGISTRY}/{ECR_REPOSITORY}:test')
+    run(ssh, f'sudo docker login --username AWS --password {ecr_password} {ECR_REGISTRY}')
+    run(ssh, f'sudo docker pull {ECR_REGISTRY}/{ECR_REPOSITORY}:test')
 
     env_flags = ' '.join(f'-e {k}={os.environ[k]}' for k in ENV_KEYS)
-    run(ssh, f'docker run -d --name ecommerce -p 3001:3001 {env_flags} {ECR_REGISTRY}/{ECR_REPOSITORY}:test')
+    run(ssh, f'sudo docker run -d --name ecommerce -p 3001:3001 {env_flags} {ECR_REGISTRY}/{ECR_REPOSITORY}:test')
 
     time.sleep(10)
 
