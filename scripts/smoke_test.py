@@ -27,12 +27,8 @@ def run(client, cmd):
 
 
 try:
-    ami_id = boto3.client('ssm', region_name=REGION).get_parameter(
-        Name='/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64'
-    )['Parameter']['Value']
-
     response = ec2.run_instances(
-        ImageId=ami_id,
+        ImageId='ami-0f3caa1cf4417e51b',
         InstanceType='t3.micro',
         KeyName='vockey',
         SecurityGroupIds=[os.environ['QA_SECURITY_GROUP_ID']],
@@ -77,11 +73,11 @@ try:
     assert r.status_code == 200, f'Products failed: {r.status_code}'
 
     r = requests.post(f'{base}/api/users/login',
-                      json={'email': 'c@gmail.com', 'password': '123456'}, timeout=10)
+                      json={'email': os.environ['SMOKE_TEST_EMAIL'], 'password': os.environ['SMOKE_TEST_PASSWORD']}, timeout=10)
     print(f'POST /api/users/login -> {r.status_code}')
     assert r.status_code in (200, 401), f'Login failed: {r.status_code}'
 
-    print('Smoke tests passed!')
+    print('Smoke tests passed')
 
 except Exception as e:
     print(f'Error: {e}')
@@ -90,4 +86,4 @@ except Exception as e:
 finally:
     if instance_id:
         ec2.terminate_instances(InstanceIds=[instance_id])
-    subprocess.run(['rm', '-f', KEY_PATH])
+    os.remove(KEY_PATH)
