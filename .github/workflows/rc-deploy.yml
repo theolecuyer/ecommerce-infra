@@ -1,0 +1,91 @@
+name: RC Deploy
+
+on:
+    repository_dispatch:
+        types: [rc-release]
+    workflow_dispatch:
+        inputs:
+            tag:
+                description: RC image tag (e.g. 1.0.0-rc.1)
+                required: true
+
+env:
+    ECR_REPOSITORY: ecommerce-app
+    AWS_REGION: us-east-1
+    RC_DOMAIN: ecommerce-rc.tlecuyer.codes
+    IMAGE_TAG: ${{ github.event.client_payload.tag || github.event.inputs.tag }}
+
+jobs:
+    rc-deploy:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout infra repo
+              uses: actions/checkout@v4
+              with:
+                  path: infra
+
+            - name: Checkout source repo
+              uses: actions/checkout@v4
+              with:
+                  repository: theolecuyer/E-Commerce-react-node-mysql
+                  path: app
+
+            - name: Generate nginx.conf for RC
+              run: NGINX_HOST=${{ env.RC_DOMAIN }} envsubst '${NGINX_HOST}' < infra/nginx.conf > app/nginx.conf
+
+            - name: Configure AWS credentials
+              uses: aws-actions/configure-aws-credentials@v4
+              with:
+                  aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                  aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                  aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+                  aws-region: ${{ env.AWS_REGION }}
+
+            - name: Login to ECR
+              id: login-ecr
+              uses: aws-actions/amazon-ecr-login@v2
+
+            - name: Build and push RC image
+              run: |
+                  docker build --build-arg REACT_APP_API_URL=https://${{ env.RC_DOMAIN }}/ \
+                    -t ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }} ./app
+                  docker push ${{ steps.login-ecr.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+
+            - name: Deploy to RC EC2
+              uses: appleboy/ssh-action@v1
+              env:
+                  ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+                  ECR_REPOSITORY: ${{ env.ECR_REPOSITORY }}
+                  IMAGE_TAG: ${{ env.IMAGE_TAG }}
+                  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                  AWS_SESSION_TOKEN: ${{ secrets.AWS_SESSION_TOKEN }}
+                  DB_SERVER_HOST: ${{ secrets.DB_SERVER_HOST }}
+                  DB_SERVER_USER: ${{ secrets.DB_SERVER_USER }}
+                  DB_SERVER_PASSWORD: ${{ secrets.DB_SERVER_PASSWORD }}
+                  DB_SERVER_DATABASE: ${{ secrets.DB_SERVER_DATABASE }}
+                  JWT_SECRET_KEY_ACCESS_TOKEN: ${{ secrets.JWT_SECRET_KEY_ACCESS_TOKEN }}
+                  JWT_SECRET_KEY_REFRESH_TOKEN: ${{ secrets.JWT_SECRET_KEY_REFRESH_TOKEN }}
+              with:
+                  host: ${{ secrets.RC_EC2_IP }}
+                  username: ec2-user
+                  key: ${{ secrets.EC2_SSH_KEY }}
+                  envs: ECR_REGISTRY,ECR_REPOSITORY,IMAGE_TAG,AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_SESSION_TOKEN,DB_SERVER_HOST,DB_SERVER_USER,DB_SERVER_PASSWORD,DB_SERVER_DATABASE,JWT_SECRET_KEY_ACCESS_TOKEN,JWT_SECRET_KEY_REFRESH_TOKEN
+                  script: |
+                      aws configure set aws_access_key_id $AWS_ACCESS_KEY_ID
+                      aws configure set aws_secret_access_key $AWS_SECRET_ACCESS_KEY
+                      aws configure set aws_session_token $AWS_SESSION_TOKEN
+                      aws configure set region us-east-1
+                      aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin $ECR_REGISTRY
+                      docker pull $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+                      docker rm -f ecommerce-rc || true
+                      docker run -d --name ecommerce-rc -p 80:80 -p 443:443 \
+                        -v /etc/letsencrypt:/etc/letsencrypt:ro \
+                        -e DB_SERVER_HOST="$DB_SERVER_HOST" \
+                        -e DB_SERVER_USER="$DB_SERVER_USER" \
+                        -e DB_SERVER_PASSWORD="$DB_SERVER_PASSWORD" \
+                        -e DB_SERVER_DATABASE="$DB_SERVER_DATABASE" \
+                        -e JWT_SECRET_KEY_ACCESS_TOKEN="$JWT_SECRET_KEY_ACCESS_TOKEN" \
+                        -e JWT_SECRET_KEY_REFRESH_TOKEN="$JWT_SECRET_KEY_REFRESH_TOKEN" \
+                        $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
