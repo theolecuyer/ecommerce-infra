@@ -8,6 +8,7 @@ on:
 env:
     ECR_REPOSITORY: ecommerce-app
     AWS_REGION: us-east-1
+    QA_DOMAIN: tlecuyer.codes
 
 jobs:
     qa-build:
@@ -25,8 +26,8 @@ jobs:
                   repository: theolecuyer/E-Commerce-react-node-mysql
                   path: app
 
-            - name: Copy nginx.conf into build
-              run: cp infra/nginx.conf app/nginx.conf
+            - name: Generate nginx.conf for QA
+              run: NGINX_HOST=${{ env.QA_DOMAIN }} envsubst '${NGINX_HOST}' < infra/nginx.conf > app/nginx.conf
 
             - name: Configure AWS credentials
               uses: aws-actions/configure-aws-credentials@v4
@@ -41,7 +42,7 @@ jobs:
               uses: aws-actions/amazon-ecr-login@v2
 
             - name: Build test image
-              run: docker build --build-arg REACT_APP_API_URL=https://tlecuyer.codes/ -t ecommerce-app:test ./app
+              run: docker build --build-arg REACT_APP_API_URL=https://${{ env.QA_DOMAIN }}/ -t ecommerce-app:test ./app
 
             - name: Install Python script dependencies
               run: pip install boto3 requests paramiko
