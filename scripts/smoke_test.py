@@ -23,8 +23,6 @@ def run(client, cmd):
     _, stdout, stderr = client.exec_command(cmd)
     if stdout.channel.recv_exit_status() != 0:
         raise Exception(f'SSH failed: {stderr.read().decode()}')
-    return stdout.read().decode()
-
 
 try:
     response = ec2.run_instances(
